@@ -13,7 +13,7 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from Pb2 import DEcwHisPErMsG_pb2, MajoRLoGinrEs_pb2, PorTs_pb2, MajoRLoGinrEq_pb2
 import google.protobuf.json_format as json_format
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import threading
 
 def rot13(text):
@@ -79,6 +79,7 @@ Hr = {
 CURRENT_BOT_UID = None
 region = 'IN'
 app = Flask(__name__)
+API_KEY = "SIAM_BHAI"
 
 bot_loop = None
 bot_key = None
@@ -325,9 +326,20 @@ async def stop_auto_loop():
         except asyncio.CancelledError:
             pass
     auto_start_running = False
+
+def check_api_key(req):
+    key = req.args.get("key")
+    return key == API_KEY
+
 @app.route('/start/<team_code>')
 def start_api(team_code):
     global bot_loop
+
+    if not check_api_key(request):
+        return jsonify({
+            "status": "error",
+            "message": "Invalid API Key"
+        })
 
     if not team_code.isdigit():
         return jsonify({
@@ -346,11 +358,15 @@ def start_api(team_code):
         "status": "success" if success else "error",
         "message": msg
     })
-
-
 @app.route('/stop')
 def stop_api():
     global bot_loop
+
+    if not check_api_key(request):
+        return jsonify({
+            "status": "error",
+            "message": "Invalid API Key"
+        })
 
     future = asyncio.run_coroutine_threadsafe(
         stop_auto_loop(),
@@ -363,6 +379,49 @@ def stop_api():
         "status": "success",
         "message": "Auto stopped"
     })
+# নিশ্চিত করো import আছে
+
+@app.route('/')
+def home():
+    data = {
+        "status": "online",
+        "developer": "SIAM BHAI",
+        "api_key": "SIAM_BHAI",
+        "endpoints": {
+            "start": "/start/{team_code}?key=SIAM_BHAI",
+            "stop": "/stop?key=SIAM_BHAI"
+        },
+        "example": {
+            "start_example": "/start/123456?key=SIAM_BHAI",
+            "stop_example": "/stop?key=SIAM_BHAI"
+        }
+    }
+    # indentation=4 দিয়ে সুন্দর করে দেখানো
+    return "<pre>" + json.dumps(data, indent=4) + "</pre>"
+
+@app.route('/change_key/<new_key>')
+def change_api_key(new_key):
+    global API_KEY
+    old_key = API_KEY
+    API_KEY = new_key
+    return f"✅ API key changed from '{old_key}' to '{API_KEY}'"
+    
+# Default API key দিয়ে access করলে current API key দেখাবে
+DEFAULT_ADMIN_KEY = "SIAM_BHAI"
+
+@app.route('/<admin_key>')
+def admin_view_key(admin_key):
+    global API_KEY
+    if admin_key == DEFAULT_ADMIN_KEY:
+        return jsonify({
+            "status": "success",
+            "current_api_key": API_KEY
+        })
+    else:
+        return jsonify({
+            "status": "error",
+            "message": "Unauthorized access"
+        })
 
 async def safe_send_message(chat_type, message, target_uid, chat_id, key, iv, max_retries=3):
     for attempt in range(max_retries):
